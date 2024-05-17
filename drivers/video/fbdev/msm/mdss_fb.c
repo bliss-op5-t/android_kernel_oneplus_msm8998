@@ -58,6 +58,10 @@
 
 #include "mdss_livedisplay.h"
 
+#ifdef CONFIG_KLAPSE
+#include <linux/klapse.h>
+#endif
+
 #ifdef CONFIG_FB_MSM_TRIPLE_BUFFER
 #define MDSS_FB_NUM 3
 #else
@@ -304,6 +308,10 @@ static void mdss_fb_set_bl_brightness(struct led_classdev *led_cdev,
 		mutex_unlock(&mfd->bl_lock);
 	}
 	mfd->bl_level_usr = bl_lvl;
+	
+#ifdef CONFIG_KLAPSE
+	set_rgb_slider(bl_lvl);
+#endif	
 }
 
 static enum led_brightness mdss_fb_get_bl_brightness(
@@ -1780,8 +1788,15 @@ void mdss_fb_set_backlight(struct msm_fb_data_type *mfd, u32 bkl_lvl)
 		} else {
 			if (mfd->bl_level != bkl_lvl)
 				bl_notify_needed = true;
+		#ifdef CONFIG_FLICKER_FREE
+			ff_mfd_copy = mfd;
+			ff_bkl_lvl_cpy = temp;
+			pr_debug("backlight sent to panel :%d\n", mdss_panel_calc_backlight(temp));
+			pdata->set_backlight(pdata, mdss_panel_calc_backlight(temp));
+		#else
 			pr_debug("backlight sent to panel :%d\n", temp);
 			pdata->set_backlight(pdata, temp);
+		#endif
 			mfd->bl_level = bkl_lvl;
 			mfd->bl_level_scaled = temp;
 		}
@@ -1793,6 +1808,17 @@ void mdss_fb_set_backlight(struct msm_fb_data_type *mfd, u32 bkl_lvl)
 				NOTIFY_TYPE_BL_UPDATE);
 	}
 }
+
+#ifdef CONFIG_FLICKER_FREE
+struct msm_fb_data_type *get_mfd_copy(void)
+{
+	return ff_mfd_copy;
+}
+
+u32 get_bkl_lvl(void){
+	return ff_bkl_lvl_cpy;
+}
+#endif
 
 void mdss_fb_update_backlight(struct msm_fb_data_type *mfd)
 {
@@ -1815,7 +1841,13 @@ void mdss_fb_update_backlight(struct msm_fb_data_type *mfd)
 				mdss_fb_bl_update_notify(mfd,
 					NOTIFY_TYPE_BL_AD_ATTEN_UPDATE);
 			mdss_fb_bl_update_notify(mfd, NOTIFY_TYPE_BL_UPDATE);
+		#ifdef CONFIG_FLICKER_FREE
+			ff_mfd_copy = mfd;
+			ff_bkl_lvl_cpy = temp;
+			pdata->set_backlight(pdata, mdss_panel_calc_backlight(temp));
+		#else
 			pdata->set_backlight(pdata, temp);
+		#endif
 			mfd->bl_level_scaled = mfd->unset_bl_level;
 			mfd->allow_bl_update = true;
 		}
@@ -1834,7 +1866,7 @@ static int mdss_fb_start_disp_thread(struct msm_fb_data_type *mfd)
 	mdss_fb_get_split(mfd);
 
 	atomic_set(&mfd->commits_pending, 0);
-	mfd->disp_thread = kthread_run(__mdss_fb_display_thread,
+	mfd->disp_thread = kthread_run_perf_critical(__mdss_fb_display_thread,
 				mfd, "mdss_fb%d", mfd->index);
 
 	if (IS_ERR(mfd->disp_thread)) {

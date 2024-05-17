@@ -503,6 +503,7 @@ static void *qcom_smem_get_private(struct qcom_smem *smem,
 				   unsigned item,
 				   size_t *size)
 {
+
 	struct smem_partition_header *phdr;
 	struct smem_private_entry *e, *end;
 	struct smem_private_entry *next_e;
@@ -517,9 +518,11 @@ static void *qcom_smem_get_private(struct qcom_smem *smem,
 	p_end = (void *)phdr + partition_size;
 
 	e = phdr_to_first_private_entry(phdr);
-	end = phdr_to_last_private_entry(phdr);
+	uncached_end = phdr_to_last_private_entry(phdr);
+	cached_end = phdr_to_first_cached_entry(phdr);
 
-	if (WARN_ON((void *)end > p_end))
+	if (WARN_ON(!IN_PARTITION_RANGE(uncached_end, 0, phdr, uncached_end)
+					|| (void *)cached_end > p_end))
 		return ERR_PTR(-EINVAL);
 
 	while ((e < end) && ((e + 1) < end)) {

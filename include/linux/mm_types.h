@@ -535,6 +535,9 @@ struct mm_struct {
 #endif
 
 	struct work_struct async_put_work;
+	unsigned int zygoteheap_in_MB;
+	int va_feature;
+	unsigned long va_feature_rnd;
 };
 
 static inline void mm_init_cpumask(struct mm_struct *mm)
